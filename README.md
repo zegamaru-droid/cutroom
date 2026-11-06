@@ -26,3 +26,7 @@ python clipper.py
 Use **Export audio** to keep the source audio, normalize loudness toward -16 LUFS, or mute the clip. The export preview uses the same setting.
 
 **Video quality** applies to the preview and export. **Compact** favors a smaller file, **High** keeps the default quality, and **Maximum** retains more detail at a larger file size. Output size depends on the footage.
+
+## Automatic captions
+
+Install [whisper.cpp](https://github.com/ggml-org/whisper.cpp), add its `whisper-cli` executable to PATH, and download a GGML Whisper model. Set the clip boundaries and choose **Generate captions**, then select the model and save an SRT. Transcription runs locally. Cutroom loads the resulting SRT for preview and export when the selected cut has stayed the same. If you change the cut, regenerate captions to match the new boundaries.

@@ -69,6 +69,21 @@ def export_clip(source, output, start, end, layout, captions, audio_mode="Origin
             pending.replace(output)
 
 
+def transcribe_clip(source, output, start, end, executable, model):
+    with tempfile.TemporaryDirectory(dir=output.parent) as staging:
+        audio = Path(staging) / "speech.wav"
+        subtitle_base = Path(staging) / "captions"
+        run("ffmpeg", "-nostdin", "-loglevel", "error", "-ss", str(start),
+            "-i", str(source), "-t", str(end - start), "-map", "0:a:0",
+            "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(audio))
+        run(str(executable), "-m", str(model), "-f", str(audio),
+            "-l", "auto", "-osrt", "-of", str(subtitle_base))
+        srt = subtitle_base.with_suffix(".srt")
+        if not srt.is_file() or "-->" not in srt.read_text(encoding="utf-8-sig"):
+            raise ValueError("Whisper returned no captions for this cut.")
+        srt.replace(output)
+
+
 def detect_highlights(source, duration, clip_length=15):
     analysis = subprocess.run(
         ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "info", "-i", str(source),
@@ -120,6 +135,8 @@ class Clipper:
         self.root = root
         self.source = self.captions = self.player = None
         self.preview_folder = None
+        self.whisper_model = None
+        self.generated_selection = None
         self.duration = 0
         self.picks = []
         self.start = tk.StringVar(value="00:00.000")
@@ -166,9 +183,14 @@ class Clipper:
         row = ttk.Frame(pane)
         row.pack(fill="x")
         ttk.Button(row, text="Add SRT captions", command=self.choose_captions).pack(side="left")
+        generate = ttk.Button(row, text="Generate captions", command=self.generate_captions)
+        generate.pack(side="left", padx=(6, 0))
+        self.actions.append(generate)
         ttk.Button(row, text="Clear captions", command=self.clear_captions).pack(side="left", padx=6)
         self.caption_label = ttk.Label(row, text="SRT timecodes are relative to the clip.")
         self.caption_label.pack(side="left", fill="x", expand=True)
+        self.start.trace_add("write", self.invalidate_generated_captions)
+        self.end.trace_add("write", self.invalidate_generated_captions)
         ttk.Button(row, text="Stop playback", command=self.stop_playback).pack(side="right")
         scan_options = ttk.Frame(pane)
         scan_options.pack(fill="x", pady=(10, 0))
@@ -296,13 +318,57 @@ class Clipper:
             self.end.set(timestamp(end))
             self.timeline.set(start)
 
+    def generate_captions(self):
+        try:
+            start, end = self.cut()
+            executable = shutil.which("whisper-cli")
+            if not executable:
+                raise ValueError("Install whisper.cpp and add whisper-cli to PATH. See the README.")
+        except ValueError as exc:
+            messagebox.showerror("Cutroom", str(exc))
+            return
+        if self.whisper_model is None:
+            model = filedialog.askopenfilename(title="Choose a Whisper GGML model",
+                                               filetypes=[("Whisper model", "*.bin")])
+            if not model:
+                return
+            self.whisper_model = Path(model).resolve()
+        source = self.source
+        selected = filedialog.asksaveasfilename(
+            title="Save clip captions", initialfile=f"{source.stem}-clip.srt",
+            defaultextension=".srt", filetypes=[("SubRip captions", "*.srt")])
+        if not selected:
+            return
+        output = Path(selected).resolve()
+        if output == source:
+            messagebox.showerror("Cutroom", "Choose a different file from the source video.")
+            return
+
+        def ready(_):
+            if (self.start.get(), self.end.get()) == selection:
+                self.generated_selection = selection
+                self.captions = output
+                self.caption_label.configure(text=output.name)
+            self.status.set(f"Saved {output}. Captions are timed to the cut used to generate them.")
+
+        selection = self.start.get(), self.end.get()
+        self.background("Generating captions locally…",
+                        lambda: transcribe_clip(source, output, start, end, executable, self.whisper_model),
+                        ready)
+
     def choose_captions(self):
         path = filedialog.askopenfilename(filetypes=[("SubRip captions", "*.srt")])
         if path:
+            self.generated_selection = None
             self.captions = Path(path).resolve()
             self.caption_label.configure(text=self.captions.name)
 
+    def invalidate_generated_captions(self, *_):
+        if self.generated_selection and (self.start.get(), self.end.get()) != self.generated_selection:
+            self.clear_captions()
+
     def clear_captions(self):
+        self.generated_selection = None
         self.captions = None
         self.caption_label.configure(text="SRT timecodes are relative to the clip.")
 
@@ -396,6 +462,8 @@ if __name__ == "__main__":
     window = tk.Tk()
     Clipper(window)
     window.mainloop()
+
+
 
 
 
