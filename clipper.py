@@ -31,12 +31,18 @@ def run(*args, cwd=None):
 
 def export_clip(source, output, start, end, layout, captions):
     filters = []
-    if layout == "Vertical fit":
-        filters.extend(["scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2",
-                        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2"])
-    elif layout == "Vertical crop":
-        filters.extend(["scale=1080:1920:force_original_aspect_ratio=increase:force_divisible_by=2",
-                        "crop=1080:1920"])
+    if layout in ("Vertical fit", "Vertical crop", "Square fit", "Square crop"):
+        height = 1080 if layout.startswith("Square") else 1920
+        if layout.endswith("fit"):
+            filters.extend([
+                f"scale=1080:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2",
+                f"pad=1080:{height}:(ow-iw)/2:(oh-ih)/2",
+            ])
+        else:
+            filters.extend([
+                f"scale=1080:{height}:force_original_aspect_ratio=increase:force_divisible_by=2",
+                f"crop=1080:{height}",
+            ])
     else:
         filters.append("pad=ceil(iw/2)*2:ceil(ih/2)*2")
     filters.append("setsar=1")
@@ -145,14 +151,15 @@ class Clipper:
             ttk.Button(row, text=f"Set {name}", command=lambda v=value: self.mark_boundary(v)).pack(side="left")
             ttk.Entry(row, textvariable=value, width=12).pack(side="left", padx=(4, 10))
         ttk.Combobox(row, state="readonly", textvariable=self.layout,
-                     values=("Original", "Vertical fit", "Vertical crop"), width=14).pack(side="left")
+                     values=("Original", "Vertical fit", "Vertical crop", "Square fit", "Square crop"), width=14).pack(side="left")
         ttk.Button(row, text="Preview playhead", command=lambda: self.preview(True)).pack(side="left", padx=6)
         row = ttk.Frame(pane)
         row.pack(fill="x")
         ttk.Button(row, text="Add SRT captions", command=self.choose_captions).pack(side="left")
         ttk.Button(row, text="Clear captions", command=self.clear_captions).pack(side="left", padx=6)
         self.caption_label = ttk.Label(row, text="SRT timecodes are relative to the clip.")
-        self.caption_label.pack(side="left")
+        self.caption_label.pack(side="left", fill="x", expand=True)
+        ttk.Button(row, text="Stop playback", command=self.stop_playback).pack(side="right")
         scan_options = ttk.Frame(pane)
         scan_options.pack(fill="x", pady=(10, 0))
         ttk.Label(scan_options, text="Highlight length (seconds)").pack(side="left")
@@ -283,6 +290,10 @@ class Clipper:
         self.captions = None
         self.caption_label.configure(text="SRT timecodes are relative to the clip.")
 
+    def stop_playback(self):
+        if not self.busy:
+            self.stop_preview()
+
     def stop_preview(self):
         if self.player and self.player.poll() is None:
             self.player.terminate()
@@ -365,6 +376,7 @@ if __name__ == "__main__":
     window = tk.Tk()
     Clipper(window)
     window.mainloop()
+
 
 
 

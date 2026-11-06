@@ -13,11 +13,12 @@ python clipper.py
 1. Open a recording.
 2. Move the playhead and click **Set In** or **Set Out**. You can also enter times directly in seconds or as `MM:SS.mmm`. With the timeline focused, use the arrow keys to move by 0.1 seconds, Shift+arrow to move by 1 second, and I/O to mark the cut boundaries. **Preview playhead** opens source playback at the playhead.
 3. Set **Highlight length** (3–120 seconds, default 15), then use **Find highlights** to suggest up to ten cuts using visual changes and audio peaks relative to the recording. Silent videos use visual changes alone. Click a suggestion to edit or export it.
-4. Choose **Original**, **Vertical fit** (keep the whole frame), or **Vertical crop** (fill the frame with a centered crop).
+4. Choose **Original** or a **Vertical** or **Square** layout. Fit preserves the whole frame. Crop fills the frame with a centered crop.
 5. Optionally import an SRT file with timecodes measured from the start of the clip. Captions are burned into the export.
-6. Export an H.264 MP4. Vertical exports are 1080 × 1920.
+6. Export an H.264 MP4. Vertical exports are 1080 × 1920. Square exports are 1080 × 1080.
 
-**Preview export** renders up to eight seconds of the cut with the selected framing and captions, then opens it in a separate player.
+**Preview export** renders up to eight seconds of the cut with the selected framing and captions, then opens it in a separate player. Use **Stop playback** to close the player.
+
 
 
 
