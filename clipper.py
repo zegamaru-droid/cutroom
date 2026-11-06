@@ -29,7 +29,10 @@ def run(*args, cwd=None):
                           encoding="utf-8", errors="replace", check=True).stdout
 
 
-def export_clip(source, output, start, end, layout, captions, audio_mode="Original"):
+EXPORT_QUALITY = {"Compact": "24", "High": "18", "Maximum": "14"}
+
+
+def export_clip(source, output, start, end, layout, captions, audio_mode="Original", quality="High"):
     audio_args = ["-an"]
     if audio_mode != "Mute":
         audio_args = ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "192k"]
@@ -60,7 +63,7 @@ def export_clip(source, output, start, end, layout, captions, audio_mode="Origin
             run("ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
                 "-ss", str(start), "-i", str(source), "-t", str(end - start),
                 "-map", "0:V:0", *audio_args, "-vf", ",".join(filters),
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+                "-c:v", "libx264", "-preset", "fast", "-crf", EXPORT_QUALITY[quality], "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart",
                 str(pending), cwd=temp)
             pending.replace(output)
@@ -123,6 +126,7 @@ class Clipper:
         self.end = tk.StringVar(value="00:00.000")
         self.layout = tk.StringVar(value="Original")
         self.audio_mode = tk.StringVar(value="Original")
+        self.quality = tk.StringVar(value="High")
         self.highlight_length = tk.StringVar(value="15")
         self.status = tk.StringVar(value="Open a video to begin.")
         root.title("Cutroom | Video Clipper")
@@ -174,6 +178,9 @@ class Clipper:
         ttk.Label(scan_options, text="Export audio").pack(side="left", padx=(16, 0))
         ttk.Combobox(scan_options, state="readonly", textvariable=self.audio_mode,
                      values=("Original", "Normalize", "Mute"), width=12).pack(side="left", padx=6)
+        ttk.Label(scan_options, text="Video quality").pack(side="left", padx=(16, 0))
+        ttk.Combobox(scan_options, state="readonly", textvariable=self.quality,
+                     values=tuple(EXPORT_QUALITY), width=10).pack(side="left", padx=6)
         self.results = tk.Listbox(pane, height=7)
         self.results.pack(fill="both", expand=True, pady=12)
         self.results.bind("<<ListboxSelect>>", self.select_pick)
@@ -322,6 +329,7 @@ class Clipper:
         self.stop_preview()
         source, layout, captions = self.source, self.layout.get(), self.captions
         audio_mode = self.audio_mode.get()
+        quality = self.quality.get()
         self.preview_folder = tempfile.TemporaryDirectory()
         output = Path(self.preview_folder.name) / "preview.mp4"
 
@@ -334,7 +342,7 @@ class Clipper:
                 self.status.set(str(exc))
 
         self.background("Rendering export preview…",
-                        lambda: export_clip(source, output, start, min(end, start + 8), layout, captions, audio_mode),
+                        lambda: export_clip(source, output, start, min(end, start + 8), layout, captions, audio_mode, quality),
                         play)
 
     def preview(self, playhead=False):
@@ -369,7 +377,8 @@ class Clipper:
                 return
             layout, captions = self.layout.get(), self.captions
             audio_mode = self.audio_mode.get()
-            self.background("Exporting MP4…", lambda: export_clip(source, output, start, end, layout, captions, audio_mode),
+            quality = self.quality.get()
+            self.background("Exporting MP4…", lambda: export_clip(source, output, start, end, layout, captions, audio_mode, quality),
                             lambda _: self.status.set(f"Saved {output}"))
 
     def close(self):
@@ -387,6 +396,7 @@ if __name__ == "__main__":
     window = tk.Tk()
     Clipper(window)
     window.mainloop()
+
 
 
 

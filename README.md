@@ -24,3 +24,5 @@ python clipper.py
 
 
 Use **Export audio** to keep the source audio, normalize loudness toward -16 LUFS, or mute the clip. The export preview uses the same setting.
+
+**Video quality** applies to the preview and export. **Compact** favors a smaller file, **High** keeps the default quality, and **Maximum** retains more detail at a larger file size. Output size depends on the footage.
