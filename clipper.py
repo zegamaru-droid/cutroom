@@ -55,7 +55,7 @@ def export_clip(source, output, start, end, layout, captions):
             pending.replace(output)
 
 
-def detect_highlights(source, duration):
+def detect_highlights(source, duration, clip_length=15):
     analysis = subprocess.run(
         ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "info", "-i", str(source),
          "-map", "0:V:0", "-an",
@@ -94,8 +94,8 @@ def detect_highlights(source, duration):
     for moment in sorted(scores, key=scores.get, reverse=True):
         if len(picks) == 10:
             break
-        start = max(0, min(moment - 7, duration - 15))
-        end = min(duration, start + 15)
+        start = max(0, min(moment - clip_length / 2, duration - clip_length))
+        end = min(duration, start + clip_length)
         if all(end <= left or start >= right for left, right in picks):
             picks.append((start, end))
     return sorted(picks)
@@ -111,6 +111,7 @@ class Clipper:
         self.start = tk.StringVar(value="00:00.000")
         self.end = tk.StringVar(value="00:00.000")
         self.layout = tk.StringVar(value="Original")
+        self.highlight_length = tk.StringVar(value="15")
         self.status = tk.StringVar(value="Open a video to begin.")
         root.title("Cutroom | Video Clipper")
         root.minsize(660, 400)
@@ -132,11 +133,16 @@ class Clipper:
         self.timeline = ttk.Scale(pane, from_=0, to=1,
                                   command=lambda value: self.position.configure(text=timestamp(float(value))))
         self.timeline.pack(fill="x")
+        for key, delta in (("Left", -0.1), ("Right", 0.1),
+                           ("Shift-Left", -1), ("Shift-Right", 1)):
+            self.timeline.bind(f"<{key}>", lambda event, step=delta: self.nudge_playhead(step))
+        self.timeline.bind("<Key-i>", lambda event: self.mark_boundary(self.start))
+        self.timeline.bind("<Key-o>", lambda event: self.mark_boundary(self.end))
+        ttk.Label(pane, text="Focused timeline: arrows ±0.1 s · Shift+arrows ±1 s · I/O mark cut").pack(anchor="w")
         row = ttk.Frame(pane)
         row.pack(fill="x", pady=10)
         for name, value in (("In", self.start), ("Out", self.end)):
-            ttk.Button(row, text=f"Set {name}", command=lambda v=value: v.set(
-                timestamp(self.timeline.get()))).pack(side="left")
+            ttk.Button(row, text=f"Set {name}", command=lambda v=value: self.mark_boundary(v)).pack(side="left")
             ttk.Entry(row, textvariable=value, width=12).pack(side="left", padx=(4, 10))
         ttk.Combobox(row, state="readonly", textvariable=self.layout,
                      values=("Original", "Vertical fit", "Vertical crop"), width=14).pack(side="left")
@@ -147,6 +153,11 @@ class Clipper:
         ttk.Button(row, text="Clear captions", command=self.clear_captions).pack(side="left", padx=6)
         self.caption_label = ttk.Label(row, text="SRT timecodes are relative to the clip.")
         self.caption_label.pack(side="left")
+        scan_options = ttk.Frame(pane)
+        scan_options.pack(fill="x", pady=(10, 0))
+        ttk.Label(scan_options, text="Highlight length (seconds)").pack(side="left")
+        ttk.Spinbox(scan_options, from_=3, to=120, width=6,
+                    textvariable=self.highlight_length).pack(side="left", padx=6)
         self.results = tk.Listbox(pane, height=7)
         self.results.pack(fill="both", expand=True, pady=12)
         self.results.bind("<<ListboxSelect>>", self.select_pick)
@@ -213,6 +224,17 @@ class Clipper:
 
         self.background("Reading video…", probe, loaded)
 
+    def nudge_playhead(self, step):
+        if self.source is not None:
+            position = max(0, min(self.duration, self.timeline.get() + step))
+            self.timeline.set(position)
+        return "break"
+
+    def mark_boundary(self, boundary):
+        if self.source is not None:
+            boundary.set(timestamp(self.timeline.get()))
+        return "break"
+
     def cut(self):
         if self.source is None:
             raise ValueError("Open a video first.")
@@ -225,6 +247,13 @@ class Clipper:
         if self.source is None:
             messagebox.showinfo("Cutroom", "Open a video first.")
             return
+        try:
+            clip_length = int(self.highlight_length.get())
+            if not 3 <= clip_length <= 120:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Cutroom", "Enter a whole number from 3 to 120 seconds.")
+            return
         source, duration = self.source, self.duration
 
         def display(picks):
@@ -234,7 +263,7 @@ class Clipper:
                 self.results.insert("end", f"Highlight   {timestamp(start)}  →  {timestamp(end)}")
             self.status.set(f"{len(picks)} suggestions. Select one to set the cut.")
 
-        self.background("Scanning video and audio…", lambda: detect_highlights(source, duration), display)
+        self.background("Scanning video and audio…", lambda: detect_highlights(source, duration, clip_length), display)
 
     def select_pick(self, _event):
         selection = self.results.curselection()
@@ -336,6 +365,8 @@ if __name__ == "__main__":
     window = tk.Tk()
     Clipper(window)
     window.mainloop()
+
+
 
 
 
