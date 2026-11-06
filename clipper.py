@@ -29,7 +29,12 @@ def run(*args, cwd=None):
                           encoding="utf-8", errors="replace", check=True).stdout
 
 
-def export_clip(source, output, start, end, layout, captions):
+def export_clip(source, output, start, end, layout, captions, audio_mode="Original"):
+    audio_args = ["-an"]
+    if audio_mode != "Mute":
+        audio_args = ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "192k"]
+        if audio_mode == "Normalize":
+            audio_args.extend(["-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "48000"])
     filters = []
     if layout in ("Vertical fit", "Vertical crop", "Square fit", "Square crop"):
         height = 1080 if layout.startswith("Square") else 1920
@@ -54,9 +59,9 @@ def export_clip(source, output, start, end, layout, captions):
             pending = Path(staging) / "clip.mp4"
             run("ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
                 "-ss", str(start), "-i", str(source), "-t", str(end - start),
-                "-map", "0:V:0", "-map", "0:a:0?", "-vf", ",".join(filters),
+                "-map", "0:V:0", *audio_args, "-vf", ",".join(filters),
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+                "-movflags", "+faststart",
                 str(pending), cwd=temp)
             pending.replace(output)
 
@@ -117,6 +122,7 @@ class Clipper:
         self.start = tk.StringVar(value="00:00.000")
         self.end = tk.StringVar(value="00:00.000")
         self.layout = tk.StringVar(value="Original")
+        self.audio_mode = tk.StringVar(value="Original")
         self.highlight_length = tk.StringVar(value="15")
         self.status = tk.StringVar(value="Open a video to begin.")
         root.title("Cutroom | Video Clipper")
@@ -165,6 +171,9 @@ class Clipper:
         ttk.Label(scan_options, text="Highlight length (seconds)").pack(side="left")
         ttk.Spinbox(scan_options, from_=3, to=120, width=6,
                     textvariable=self.highlight_length).pack(side="left", padx=6)
+        ttk.Label(scan_options, text="Export audio").pack(side="left", padx=(16, 0))
+        ttk.Combobox(scan_options, state="readonly", textvariable=self.audio_mode,
+                     values=("Original", "Normalize", "Mute"), width=12).pack(side="left", padx=6)
         self.results = tk.Listbox(pane, height=7)
         self.results.pack(fill="both", expand=True, pady=12)
         self.results.bind("<<ListboxSelect>>", self.select_pick)
@@ -312,6 +321,7 @@ class Clipper:
             return
         self.stop_preview()
         source, layout, captions = self.source, self.layout.get(), self.captions
+        audio_mode = self.audio_mode.get()
         self.preview_folder = tempfile.TemporaryDirectory()
         output = Path(self.preview_folder.name) / "preview.mp4"
 
@@ -324,7 +334,7 @@ class Clipper:
                 self.status.set(str(exc))
 
         self.background("Rendering export preview…",
-                        lambda: export_clip(source, output, start, min(end, start + 8), layout, captions),
+                        lambda: export_clip(source, output, start, min(end, start + 8), layout, captions, audio_mode),
                         play)
 
     def preview(self, playhead=False):
@@ -358,7 +368,8 @@ class Clipper:
                 messagebox.showerror("Cutroom", "Choose a different file from the source video.")
                 return
             layout, captions = self.layout.get(), self.captions
-            self.background("Exporting MP4…", lambda: export_clip(source, output, start, end, layout, captions),
+            audio_mode = self.audio_mode.get()
+            self.background("Exporting MP4…", lambda: export_clip(source, output, start, end, layout, captions, audio_mode),
                             lambda _: self.status.set(f"Saved {output}"))
 
     def close(self):
@@ -376,6 +387,7 @@ if __name__ == "__main__":
     window = tk.Tk()
     Clipper(window)
     window.mainloop()
+
 
 
 

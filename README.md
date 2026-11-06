@@ -22,3 +22,5 @@ python clipper.py
 
 
 
+
+Use **Export audio** to keep the source audio, normalize loudness toward -16 LUFS, or mute the clip. The export preview uses the same setting.
